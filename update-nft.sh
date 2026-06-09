@@ -21,6 +21,14 @@ else
     GUEST_IF="${GUEST_IF%% *}"
 fi
 
+# Автоопределение Freedom интерфейса
+if ip link show br-freedom >/dev/null 2>&1; then
+    FREEDOM_IF="br-freedom"
+else
+    FREEDOM_IF=$(uci -q get network.freedom.device || uci -q get network.freedom.ifname || echo "")
+    FREEDOM_IF="${FREEDOM_IF%% *}"
+fi
+
 extract_server_ips() {
     python3 -c '
 import json, sys
@@ -85,6 +93,11 @@ setup_network() {
     # Гостевая сеть (если существует)
     if [ -n "$GUEST_IF" ] && ip link show "$GUEST_IF" >/dev/null 2>&1; then
         nft add rule inet fw4 xray_tproxy iifname "$GUEST_IF" return
+    fi
+
+    # Freedom сеть (если существует)
+    if [ -n "$FREEDOM_IF" ] && ip link show "$FREEDOM_IF" >/dev/null 2>&1; then
+        nft add rule inet fw4 xray_tproxy iifname "$FREEDOM_IF" return
     fi
 
     # Блокировка QUIC (UDP/443) — ДО TProxy, иначе пакет уйдёт в Xray до проверки

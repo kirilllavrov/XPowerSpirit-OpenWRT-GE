@@ -18,6 +18,8 @@ HOME_SSID="Home-WiFi"
 HOME_PASS="HomeSecure123!"
 GUEST_SSID="Guest-WiFi"
 GUEST_PASS="GuestSecure123!"
+FREEDOM_SSID="Freedom-WiFi"
+FREEDOM_PASS="FreedomSecure123!"
 
 # Парсер аргументов
 for arg in "$@"; do
@@ -26,6 +28,8 @@ for arg in "$@"; do
 	--pass=*) HOME_PASS="${arg#*=}" ;;
 	--ssid-guest=*) GUEST_SSID="${arg#*=}" ;;
 	--pass-guest=*) GUEST_PASS="${arg#*=}" ;;
+	--ssid-freedom=*) FREEDOM_SSID="${arg#*=}" ;;
+	--pass-freedom=*) FREEDOM_PASS="${arg#*=}" ;;
 	esac
 done
 
@@ -40,17 +44,10 @@ validate_len() {
 
 validate_len "$HOME_SSID" 1 32
 validate_len "$GUEST_SSID" 1 32
+validate_len "$FREEDOM_SSID" 1 32
 validate_len "$HOME_PASS" 8 63
 validate_len "$GUEST_PASS" 8 63
-
-# === Проверка существования гостевой сети ===
-GUEST_EXISTS=0
-if uci -q get network.guest >/dev/null 2>&1; then
-	GUEST_EXISTS=1
-	echo "[+] Обнаружена гостевая сеть (network.guest), будет настроен Guest Wi-Fi"
-else
-	echo "[-] Гостевая сеть не найдена (network.guest отсутствует), Guest Wi-Fi не будет настроен"
-fi
+validate_len "$FREEDOM_PASS" 8 63
 
 # === Очистка ===
 echo "Очистка существующих Wi-Fi интерфейсов..."
@@ -115,35 +112,44 @@ for RADIO in $(uci show wireless | sed -n 's/^\(wireless\.\([^=]*\)\)=wifi-devic
 done
 uci commit wireless
 
-# === Guest Wi-Fi (только если существует гостевая сеть) ===
-if [ $GUEST_EXISTS -eq 1 ]; then
-	echo "Настройка Guest Wi-Fi..."
-	for RADIO in $(uci show wireless | sed -n 's/^\(wireless\.\([^=]*\)\)=wifi-device.*/\2/p'); do
-		uci set wireless.guest_${RADIO}="wifi-iface"
-		uci set wireless.guest_${RADIO}.device="$RADIO"
-		uci set wireless.guest_${RADIO}.mode="ap"
-		uci set wireless.guest_${RADIO}.network="guest"
-		uci set wireless.guest_${RADIO}.ssid="$GUEST_SSID"
-		uci set wireless.guest_${RADIO}.encryption="sae-mixed"
-		uci set wireless.guest_${RADIO}.key="$GUEST_PASS"
-		uci set wireless.guest_${RADIO}.isolate="1"
-		uci set wireless.guest_${RADIO}.bridge_isolate="1"
-		uci set wireless.guest_${RADIO}.disabled="0"
-	done
-	uci commit wireless
-else
-	echo "Пропускаем настройку Guest Wi-Fi (нет сети guest в /etc/config/network)"
-fi
+# === Guest Wi-Fi ===
+echo "Настройка Guest Wi-Fi..."
+for RADIO in $(uci show wireless | sed -n 's/^\(wireless\.\([^=]*\)\)=wifi-device.*/\2/p'); do
+	uci set wireless.guest_${RADIO}="wifi-iface"
+	uci set wireless.guest_${RADIO}.device="$RADIO"
+	uci set wireless.guest_${RADIO}.mode="ap"
+	uci set wireless.guest_${RADIO}.network="guest"
+	uci set wireless.guest_${RADIO}.ssid="$GUEST_SSID"
+	uci set wireless.guest_${RADIO}.encryption="sae-mixed"
+	uci set wireless.guest_${RADIO}.key="$GUEST_PASS"
+	uci set wireless.guest_${RADIO}.isolate="1"
+	uci set wireless.guest_${RADIO}.bridge_isolate="1"
+	uci set wireless.guest_${RADIO}.disabled="0"
+done
+uci commit wireless
+
+# === Freedom Wi-Fi ===
+echo "Настройка Freedom Wi-Fi..."
+for RADIO in $(uci show wireless | sed -n 's/^\(wireless\.\([^=]*\)\)=wifi-device.*/\2/p'); do
+	uci set wireless.freedom_${RADIO}="wifi-iface"
+	uci set wireless.freedom_${RADIO}.device="$RADIO"
+	uci set wireless.freedom_${RADIO}.mode="ap"
+	uci set wireless.freedom_${RADIO}.network="freedom"
+	uci set wireless.freedom_${RADIO}.ssid="$FREEDOM_SSID"
+	uci set wireless.freedom_${RADIO}.encryption="sae-mixed"
+	uci set wireless.freedom_${RADIO}.key="$FREEDOM_PASS"
+	uci set wireless.freedom_${RADIO}.isolate="1"
+	uci set wireless.freedom_${RADIO}.bridge_isolate="1"
+	uci set wireless.freedom_${RADIO}.disabled="0"
+done
+uci commit wireless
 
 echo "  → Применяем изменения..."
 wifi reload
 sleep 3
 
 echo "=== Wi-Fi успешно настроен ==="
-echo "Home  : $HOME_SSID"
-if [ $GUEST_EXISTS -eq 1 ]; then
-	echo "Guest : $GUEST_SSID"
-else
-	echo "Guest : не настроен"
-fi
-echo "Режим : WPA2 + WPA3 (sae-mixed) | PMF Required"
+echo "Home    : $HOME_SSID"
+echo "Guest   : $GUEST_SSID"
+echo "Freedom : $FREEDOM_SSID"
+echo "Режим   : WPA2 + WPA3 (sae-mixed) | PMF Required"
