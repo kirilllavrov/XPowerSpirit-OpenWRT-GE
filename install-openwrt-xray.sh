@@ -14,7 +14,7 @@ echo "  "
 }
 
 # Переменные
-REPO="https://raw.githubusercontent.com/kirilllavrov/XPowerSpirit-OpenWRT-GE/main"
+REPO="https://raw.githubusercontent.com/kirilllavrov/XPowerSpirit-OpenWRT/main"
 GENERATOR="/usr/share/xray/xray-generate-config.py"
 PARSER="/usr/share/xray/xray-sub-parser.py"
 UPDATER="/usr/share/xray/update-xray.sh"
@@ -32,12 +32,10 @@ SUB_URL=""
 REMARKS_FILTER=""
 DWL_DOMAIN=""
 GUEST_ENABLED=0
-GUEST_NET="Guest"
-GUEST_IP="192.168.10.1"
-FREEDOM_ENABLED=0
-FREEDOM_NET="Freedom"
-FREEDOM_IP="192.168.20.1"
-XRAY_NETS="freedom"
+GUEST_NET="guest"
+GUEST_IP="192.168.2.1"
+DL_GUEST="5120"
+UL_GUEST="5120"
 
 # =============================================
 #   ХЕЛПЕРЫ ДЛЯ ЕДИНОГО JSON-КОНФИГА
@@ -144,9 +142,9 @@ for arg in "$@"; do
 	--remarks=*) REMARKS_FILTER="${arg#*=}" ;;
 	--guest=1) GUEST_ENABLED=1 ;;
 	--guest-ip=*) GUEST_IP="${arg#*=}" ;;
-	--freedom=1) FREEDOM_ENABLED=1 ;;
-	--freedom-ip=*) FREEDOM_IP="${arg#*=}" ;;
-	--xray-nets=*) XRAY_NETS="${arg#*=}" ;;	--sub=*) SUB_URL="${arg#*=}" ;;
+	--guest-dl=*) DL_GUEST="${arg#*=}" ;;
+	--guest-ul=*) UL_GUEST="${arg#*=}" ;;
+	--sub=*) SUB_URL="${arg#*=}" ;;
 	--dwl=*) DWL_DOMAIN="${arg#*=}" ;;
 	*) echo "[!] Неизвестный аргумент: $arg" ;;
 	esac
@@ -230,9 +228,6 @@ settings_set ".subscription.url" "$SUB_URL"
 [ -n "$DWL_DOMAIN" ] && jq --arg d "$DWL_DOMAIN" \
     'if .domain_whitelist | index($d) then . else .domain_whitelist += [$d] end' \
     "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
-# Сохраняем список сетей, трафик которых пойдёт через Xray
-jq --arg nets "$XRAY_NETS" '.xray_nets = ($nets | split(","))' \
-    "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
 echo "[+] settings.json сохранён: $SETTINGS_JSON"
 
 # =============================================
@@ -254,164 +249,96 @@ uci commit dhcp
 echo "[+] Сеть настроена (изменения применятся после перезагрузки), IPv6 отключён"
 
 # =============================================
-# 5. Настраиваем гостевые сети
+# 5. Настраиваем гостевую сеть и лимиты скорости (если включена)
 # =============================================
-if [ $GUEST_ENABLED -eq 1 ] || [ $FREEDOM_ENABLED -eq 1 ]; then
-	echo "5. Настройка гостевых сетей:"
+if [ $GUEST_ENABLED -eq 1 ]; then
+	echo "5. Настройка Guest Network и SQM:"
 
-	# === Guest (первая гостевая сеть) ===
-	if [ $GUEST_ENABLED -eq 1 ]; then
-		echo "  → Настройка Guest Network:"
+	# 5.1. Guest Bridge + Interface
+	uci -q delete network.${GUEST_NET}_dev
+	uci set network.${GUEST_NET}_dev="device"
+	uci set network.${GUEST_NET}_dev.type="bridge"
+	uci set network.${GUEST_NET}_dev.name="br-${GUEST_NET}"
+	uci set network.${GUEST_NET}_dev.bridge_empty="1"
+	uci set network.${GUEST_NET}_dev.mtu="1500"
 
-		# Bridge device (config device)
-		# Сначала убираем lan4 из br-lan (если он там был), чтобы порт не висел в двух мостах
-		for sec in $(uci show network | grep "\.ports=" | grep "lan4" | sed 's/\.ports=.*//'); do
-			uci del_list ${sec}.ports="lan4"
-		done
-		uci -q delete network.Guest_dev
-		uci set network.Guest_dev="device"
-		uci set network.Guest_dev.type="bridge"
-		uci set network.Guest_dev.name="br-guest"
-		uci add_list network.Guest_dev.ports="lan4"
-		uci set network.Guest_dev.igmp_snooping="1"
+	uci -q delete network.$GUEST_NET
+	uci set network.$GUEST_NET="interface"
+	uci set network.$GUEST_NET.proto="static"
+	uci set network.$GUEST_NET.device="br-${GUEST_NET}"
+	uci set network.$GUEST_NET.ipaddr="$GUEST_IP"
+	uci set network.$GUEST_NET.netmask="255.255.255.0"
+	uci set network.$GUEST_NET.force_link="1"
+	uci commit network
+	echo "  → Guest Bridge + Interface настроены: br-${GUEST_NET} (${GUEST_IP}/24)"
 
-		# Interface
-		uci -q delete network.Guest
-		uci set network.Guest="interface"
-		uci set network.Guest.proto="static"
-		uci set network.Guest.device="br-guest"
-		uci set network.Guest.ipaddr="$GUEST_IP"
-		uci set network.Guest.netmask="255.255.255.0"
-		uci set network.Guest.type="bridge"
-		uci commit network
-		echo "  → Guest Bridge + Interface: br-guest (${GUEST_IP}/24)"
+	# 5.2. DHCP Guest
+	uci -q delete dhcp.$GUEST_NET
+	uci set dhcp.$GUEST_NET="dhcp"
+	uci set dhcp.$GUEST_NET.interface="$GUEST_NET"
+	uci set dhcp.$GUEST_NET.start="100"
+	uci set dhcp.$GUEST_NET.limit="150"
+	uci set dhcp.$GUEST_NET.leasetime="12h"
+	uci set dhcp.$GUEST_NET.force="1"
+	uci set dhcp.$GUEST_NET.ignore="0"
+	uci commit dhcp
+	echo "  → DHCP для Guest настроен: $GUEST_NET"
 
-		# DHCP
-		uci -q delete dhcp.Guest
-		uci set dhcp.Guest="dhcp"
-		uci set dhcp.Guest.interface="Guest"
-		uci set dhcp.Guest.start="100"
-		uci set dhcp.Guest.limit="150"
-		uci set dhcp.Guest.leasetime="12h"
-		uci set dhcp.Guest.force="1"
-		uci set dhcp.Guest.ignore="0"
-		uci commit dhcp
-		echo "  → DHCP для Guest настроен"
+	# 5.3. Firewall Guest Zone + Rules
+	uci -q delete firewall.$GUEST_NET
+	uci set firewall.$GUEST_NET="zone"
+	uci set firewall.$GUEST_NET.name="$GUEST_NET"
+	uci set firewall.$GUEST_NET.network="$GUEST_NET"
+	uci set firewall.$GUEST_NET.input="REJECT"
+	uci set firewall.$GUEST_NET.output="ACCEPT"
+	uci set firewall.$GUEST_NET.forward="REJECT"
+	uci set firewall.$GUEST_NET.masq="1"
+	uci set firewall.$GUEST_NET.mtu_fix="1"
+	echo "  → Firewall зона для Guest создана: $GUEST_NET"
 
-		# Firewall Zone
-		uci -q delete firewall.Guest
-		uci set firewall.Guest="zone"
-		uci set firewall.Guest.name="Guest"
-		uci set firewall.Guest.network="Guest"
-		uci set firewall.Guest.input="REJECT"
-		uci set firewall.Guest.output="ACCEPT"
-		uci set firewall.Guest.forward="REJECT"
-		uci set firewall.Guest.masq="1"
-		uci set firewall.Guest.mtu_fix="1"
+	# 5.4 Firewall DNS
+	uci -q delete firewall.${GUEST_NET}_dns
+	uci set firewall.${GUEST_NET}_dns="rule"
+	uci set firewall.${GUEST_NET}_dns.name="Allow-DNS-Guest"
+	uci set firewall.${GUEST_NET}_dns.src="$GUEST_NET"
+	uci set firewall.${GUEST_NET}_dns.dest_port="53"
+	uci set firewall.${GUEST_NET}_dns.proto="tcp udp"
+	uci set firewall.${GUEST_NET}_dns.target="ACCEPT"
+	echo "  → Firewall правило для DNS создано: $GUEST_NET"
 
-		# Firewall DNS
-		uci -q delete firewall.Guest_dns
-		uci set firewall.Guest_dns="rule"
-		uci set firewall.Guest_dns.name="Allow-DNS-Guest"
-		uci set firewall.Guest_dns.src="Guest"
-		uci set firewall.Guest_dns.dest_port="53"
-		uci set firewall.Guest_dns.proto="tcp udp"
-		uci set firewall.Guest_dns.target="ACCEPT"
+	# 5.5 Firewall DHCP
+	uci -q delete firewall.${GUEST_NET}_dhcp
+	uci set firewall.${GUEST_NET}_dhcp="rule"
+	uci set firewall.${GUEST_NET}_dhcp.name="Allow-DHCP-Guest"
+	uci set firewall.${GUEST_NET}_dhcp.src="$GUEST_NET"
+	uci set firewall.${GUEST_NET}_dhcp.dest_port="67-68"
+	uci set firewall.${GUEST_NET}_dhcp.proto="udp"
+	uci set firewall.${GUEST_NET}_dhcp.target="ACCEPT"
+	echo "  → Firewall правило для DHCP создано: $GUEST_NET"
 
-		# Firewall DHCP
-		uci -q delete firewall.Guest_dhcp
-		uci set firewall.Guest_dhcp="rule"
-		uci set firewall.Guest_dhcp.name="Allow-DHCP-Guest"
-		uci set firewall.Guest_dhcp.src="Guest"
-		uci set firewall.Guest_dhcp.dest_port="67-68"
-		uci set firewall.Guest_dhcp.proto="udp"
-		uci set firewall.Guest_dhcp.target="ACCEPT"
+	# 5.6 Forward to WAN
+	uci -q delete firewall.${GUEST_NET}_wan
+	uci set firewall.${GUEST_NET}_wan="forwarding"
+	uci set firewall.${GUEST_NET}_wan.src="$GUEST_NET"
+	uci set firewall.${GUEST_NET}_wan.dest="wan"
+	uci commit firewall
+	echo "  → Firewall правило для доступа Guest в WAN создано: $GUEST_NET → wan"
 
-		# Forward to WAN
-		uci -q delete firewall.Guest_wan
-		uci set firewall.Guest_wan="forwarding"
-		uci set firewall.Guest_wan.src="Guest"
-		uci set firewall.Guest_wan.dest="wan"
-		uci commit firewall
+	# 5.7 Настраиваем SQM только для Guest
+	uci -q delete sqm.$GUEST_NET
+	uci set sqm.$GUEST_NET="queue"
+	uci set sqm.$GUEST_NET.interface="br-${GUEST_NET}"
+	uci set sqm.$GUEST_NET.download="$DL_GUEST"
+	uci set sqm.$GUEST_NET.upload="$UL_GUEST"
+	uci set sqm.$GUEST_NET.qdisc="cake"
+	uci set sqm.$GUEST_NET.script="piece_of_cake.qos"
+	uci set sqm.$GUEST_NET.enabled="1"
+	uci commit sqm
+	echo "  → SQM настроен для Guest: ${DL_GUEST}kbps down / ${UL_GUEST}kbps up"
 
-		echo "  [+] Guest Network настроена"
-	fi
-
-	# === Freedom (вторая гостевая сеть) ===
-	if [ $FREEDOM_ENABLED -eq 1 ]; then
-		echo "  → Настройка Freedom Network:"
-
-		# Bridge device (config device)
-		uci -q delete network.Freedom_dev
-		uci set network.Freedom_dev="device"
-		uci set network.Freedom_dev.type="bridge"
-		uci set network.Freedom_dev.name="br-freedom"
-		uci set network.Freedom_dev.igmp_snooping="1"
-
-		# Interface
-		uci -q delete network.Freedom
-		uci set network.Freedom="interface"
-		uci set network.Freedom.proto="static"
-		uci set network.Freedom.ipaddr="$FREEDOM_IP"
-		uci set network.Freedom.netmask="255.255.255.0"
-		uci set network.Freedom.device="br-freedom"
-		uci commit network
-		echo "  → Freedom Bridge + Interface: br-freedom (${FREEDOM_IP}/24)"
-
-		# DHCP
-		uci -q delete dhcp.Freedom
-		uci set dhcp.Freedom="dhcp"
-		uci set dhcp.Freedom.interface="Freedom"
-		uci set dhcp.Freedom.start="100"
-		uci set dhcp.Freedom.limit="150"
-		uci set dhcp.Freedom.leasetime="12h"
-		uci set dhcp.Freedom.force="1"
-		uci set dhcp.Freedom.ignore="0"
-		uci commit dhcp
-		echo "  → DHCP для Freedom настроен"
-
-		# Firewall Zone
-		uci -q delete firewall.Freedom
-		uci set firewall.Freedom="zone"
-		uci set firewall.Freedom.name="Freedom"
-		uci set firewall.Freedom.network="Freedom"
-		uci set firewall.Freedom.input="REJECT"
-		uci set firewall.Freedom.output="ACCEPT"
-		uci set firewall.Freedom.forward="REJECT"
-		uci set firewall.Freedom.masq="1"
-		uci set firewall.Freedom.mtu_fix="1"
-
-		# Firewall DNS
-		uci -q delete firewall.Freedom_dns
-		uci set firewall.Freedom_dns="rule"
-		uci set firewall.Freedom_dns.name="Allow-DNS-Freedom"
-		uci set firewall.Freedom_dns.src="Freedom"
-		uci set firewall.Freedom_dns.dest_port="53"
-		uci set firewall.Freedom_dns.proto="tcp udp"
-		uci set firewall.Freedom_dns.target="ACCEPT"
-
-		# Firewall DHCP
-		uci -q delete firewall.Freedom_dhcp
-		uci set firewall.Freedom_dhcp="rule"
-		uci set firewall.Freedom_dhcp.name="Allow-DHCP-Freedom"
-		uci set firewall.Freedom_dhcp.src="Freedom"
-		uci set firewall.Freedom_dhcp.dest_port="67-68"
-		uci set firewall.Freedom_dhcp.proto="udp"
-		uci set firewall.Freedom_dhcp.target="ACCEPT"
-
-		# Forward to WAN
-		uci -q delete firewall.Freedom_wan
-		uci set firewall.Freedom_wan="forwarding"
-		uci set firewall.Freedom_wan.src="Freedom"
-		uci set firewall.Freedom_wan.dest="wan"
-		uci commit firewall
-
-		echo "  [+] Freedom Network настроена"
-	fi
-
-	echo "[+] Настройка гостевых сетей завершена (изменения применятся после перезагрузки)"
+	echo "[+] Настройка Guest Network и SQM завершена (изменения применятся после перезагрузки)"
 else
-	echo "5. Пропускаем настройку гостевых сетей (--guest=1 и --freedom=1 не указаны)"
+	echo "5. Пропускаем настройку гостевой сети (--guest=1 не указан)"
 fi
 
 # =============================================

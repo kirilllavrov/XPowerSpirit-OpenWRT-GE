@@ -17,27 +17,9 @@ fi
 if ip link show br-guest >/dev/null 2>&1; then
     GUEST_IF="br-guest"
 else
-    GUEST_IF=$(uci -q get network.Guest.device || uci -q get network.Guest.ifname || echo "")
+    GUEST_IF=$(uci -q get network.guest.device || uci -q get network.guest.ifname || echo "")
     GUEST_IF="${GUEST_IF%% *}"
 fi
-
-# Автоопределение Freedom интерфейса
-if ip link show br-freedom >/dev/null 2>&1; then
-    FREEDOM_IF="br-freedom"
-else
-    FREEDOM_IF=$(uci -q get network.Freedom.device || uci -q get network.Freedom.ifname || echo "")
-    FREEDOM_IF="${FREEDOM_IF%% *}"
-fi
-
-SETTINGS_JSON="/etc/xray/settings.json"
-# Читаем список сетей, трафик которых идёт через Xray (по умолчанию только freedom)
-XRAY_NETS=$(jq -r '.xray_nets // ["freedom"] | join(",")' "$SETTINGS_JSON" 2>/dev/null || echo "freedom")
-
-# Проверка: входит ли сеть в список проксируемых через Xray
-in_xray_nets() {
-    local net="$1"
-    echo "$XRAY_NETS" | tr ',' '\n' | grep -qxF "$net"
-}
 
 extract_server_ips() {
     python3 -c '
@@ -100,35 +82,17 @@ setup_network() {
         fi
     done
 
-    # ================================================================
-    #  УСЛОВНАЯ ОБРАБОТКА СЕТЕЙ (на основе xray_nets из settings.json)
-    # ================================================================
-    # Для каждой известной сети (lan, guest, freedom):
-    #   - если сеть в xray_nets → QUIC block + TProxy
-    #   - если сети нет в xray_nets → bypass (трафик идёт напрямую)
+    # Гостевая сеть (если существует)
+    if [ -n "$GUEST_IF" ] && ip link show "$GUEST_IF" >/dev/null 2>&1; then
+        nft add rule inet fw4 xray_tproxy iifname "$GUEST_IF" return
+    fi
 
-    for net_info in "lan:$LAN_IF" "guest:$GUEST_IF" "freedom:$FREEDOM_IF"; do
-        net_name="${net_info%%:*}"
-        net_if="${net_info##*:}"
+    # Блокировка QUIC (UDP/443) — ДО TProxy, иначе пакет уйдёт в Xray до проверки
+    nft add rule inet fw4 xray_tproxy iifname "$LAN_IF" udp dport 443 drop
 
-        # Если интерфейс не задан (сеть не сконфигурирована) — пропускаем.
-        # Примечание: НЕ проверяем ip link show — nftables iifname работает
-        # с ещё не созданными интерфейсами (актуально для br-freedom без физ. портов).
-        [ -z "$net_if" ] && continue
-
-        if in_xray_nets "$net_name"; then
-            # QUIC block для этой сети
-            nft add rule inet fw4 xray_tproxy iifname "$net_if" udp dport 443 drop
-            # TProxy для этой сети
-            nft add rule inet fw4 xray_tproxy iifname "$net_if" meta l4proto tcp tproxy ip to 127.0.0.1:12345 meta mark set 0x1 accept
-            nft add rule inet fw4 xray_tproxy iifname "$net_if" meta l4proto udp tproxy ip to 127.0.0.1:12345 meta mark set 0x1 accept
-            echo "  → Xray TProxy включён для $net_name ($net_if)" >&2
-        else
-            # Bypass — весь трафик этой сети идёт напрямую
-            nft add rule inet fw4 xray_tproxy iifname "$net_if" return
-            echo "  → $net_name ($net_if) — трафик напрямую (не в xray_nets)" >&2
-        fi
-    done
+    # TProxy для LAN (сохраняем оригинальный mark 0x1 для policy routing)
+    nft add rule inet fw4 xray_tproxy iifname "$LAN_IF" meta l4proto tcp tproxy ip to 127.0.0.1:12345 meta mark set 0x1 accept
+    nft add rule inet fw4 xray_tproxy iifname "$LAN_IF" meta l4proto udp tproxy ip to 127.0.0.1:12345 meta mark set 0x1 accept
 
     # TProxy для трафика самого роутера (перенаправлен из OUTPUT с mark 0x1 через lo)
     # Эти правила не имеют iifname — сработают для пакетов, уже отмаркированных OUTPUT chain
