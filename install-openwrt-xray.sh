@@ -255,8 +255,16 @@ uci -q delete network.${GUEST_NET}_dev
 uci set network.${GUEST_NET}_dev="device"
 uci set network.${GUEST_NET}_dev.type="bridge"
 uci set network.${GUEST_NET}_dev.name="br-${GUEST_NET}"
-uci set network.${GUEST_NET}_dev.bridge_empty="1"
 uci set network.${GUEST_NET}_dev.mtu="1500"
+
+# Переносим lan4 из br-lan в br-guest
+LAN_DEV=$(uci show network | sed -n "s/^\(network\.[^=]*\)\.name='br-lan'$/\1/p" | head -1)
+if [ -n "$LAN_DEV" ]; then
+    uci del_list ${LAN_DEV}.ports='lan4' 2>/dev/null
+    echo "  → lan4 убран из br-lan"
+fi
+uci add_list network.${GUEST_NET}_dev.ports='lan4'
+echo "  → lan4 добавлен в br-guest"
 
 uci -q delete network.$GUEST_NET
 uci set network.$GUEST_NET="interface"
