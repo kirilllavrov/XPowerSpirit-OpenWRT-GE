@@ -71,6 +71,11 @@ setup_network() {
         nft flush chain inet fw4 xray_output
     fi
 
+    # Пропускаем TProxy-пакеты в INPUT (до зонных правил fw4, иначе freedom input=REJECT дропнет)
+    if ! nft list chain inet fw4 input 2>/dev/null | grep -q "meta mark 0x00000001 accept"; then
+        nft insert rule inet fw4 input meta mark 0x00000001 accept
+    fi
+
     # ========== PREROUTING (xray_tproxy) ==========
 
     # Если пакет уже отмаркирован Xray (mark 2) — пропускаем (защита от петель)
