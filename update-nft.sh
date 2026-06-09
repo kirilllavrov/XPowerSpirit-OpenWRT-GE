@@ -111,8 +111,10 @@ setup_network() {
         net_name="${net_info%%:*}"
         net_if="${net_info##*:}"
 
+        # Если интерфейс не задан (сеть не сконфигурирована) — пропускаем.
+        # Примечание: НЕ проверяем ip link show — nftables iifname работает
+        # с ещё не созданными интерфейсами (актуально для br-freedom без физ. портов).
         [ -z "$net_if" ] && continue
-        ip link show "$net_if" >/dev/null 2>&1 || continue
 
         if in_xray_nets "$net_name"; then
             # QUIC block для этой сети
