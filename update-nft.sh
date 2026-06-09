@@ -95,17 +95,15 @@ setup_network() {
         nft add rule inet fw4 xray_tproxy iifname "$GUEST_IF" return
     fi
 
-    # Freedom сеть (если существует)
-    if [ -n "$FREEDOM_IF" ] && ip link show "$FREEDOM_IF" >/dev/null 2>&1; then
-        nft add rule inet fw4 xray_tproxy iifname "$FREEDOM_IF" return
-    fi
+    # LAN сеть — напрямую (не проксируется)
+    nft add rule inet fw4 xray_tproxy iifname "$LAN_IF" return
 
     # Блокировка QUIC (UDP/443) — ДО TProxy, иначе пакет уйдёт в Xray до проверки
-    nft add rule inet fw4 xray_tproxy iifname "$LAN_IF" udp dport 443 drop
+    nft add rule inet fw4 xray_tproxy iifname "$FREEDOM_IF" udp dport 443 drop
 
-    # TProxy для LAN (сохраняем оригинальный mark 0x1 для policy routing)
-    nft add rule inet fw4 xray_tproxy iifname "$LAN_IF" meta l4proto tcp tproxy ip to 127.0.0.1:12345 meta mark set 0x1 accept
-    nft add rule inet fw4 xray_tproxy iifname "$LAN_IF" meta l4proto udp tproxy ip to 127.0.0.1:12345 meta mark set 0x1 accept
+    # TProxy для Freedom сети (сохраняем оригинальный mark 0x1 для policy routing)
+    nft add rule inet fw4 xray_tproxy iifname "$FREEDOM_IF" meta l4proto tcp tproxy ip to 127.0.0.1:12345 meta mark set 0x1 accept
+    nft add rule inet fw4 xray_tproxy iifname "$FREEDOM_IF" meta l4proto udp tproxy ip to 127.0.0.1:12345 meta mark set 0x1 accept
 
     # TProxy для трафика самого роутера (перенаправлен из OUTPUT с mark 0x1 через lo)
     # Эти правила не имеют iifname — сработают для пакетов, уже отмаркированных OUTPUT chain
