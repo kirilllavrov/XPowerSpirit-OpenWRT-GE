@@ -14,7 +14,7 @@ echo "  "
 }
 
 # Переменные
-REPO="https://raw.githubusercontent.com/kirilllavrov/XPowerSpirit-OpenWRT/main"
+REPO="https://raw.githubusercontent.com/kirilllavrov/XPowerSpirit-OpenWRT-GE/main"
 GENERATOR="/usr/share/xray/xray-generate-config.py"
 PARSER="/usr/share/xray/xray-sub-parser.py"
 UPDATER="/usr/share/xray/update-xray.sh"

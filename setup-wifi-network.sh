@@ -122,7 +122,7 @@ for RADIO in $(uci show wireless | sed -n 's/^\(wireless\.\([^=]*\)\)=wifi-devic
 	uci set wireless.guest_${RADIO}.ssid="$GUEST_SSID"
 	uci set wireless.guest_${RADIO}.encryption="sae-mixed"
 	uci set wireless.guest_${RADIO}.key="$GUEST_PASS"
-	uci set wireless.guest_${RADIO}.isolate="1"
+	uci set wireless.guest_${RADIO}.isolate="0"
 	uci set wireless.guest_${RADIO}.bridge_isolate="1"
 	uci set wireless.guest_${RADIO}.disabled="0"
 done
@@ -138,7 +138,7 @@ for RADIO in $(uci show wireless | sed -n 's/^\(wireless\.\([^=]*\)\)=wifi-devic
 	uci set wireless.freedom_${RADIO}.ssid="$FREEDOM_SSID"
 	uci set wireless.freedom_${RADIO}.encryption="sae-mixed"
 	uci set wireless.freedom_${RADIO}.key="$FREEDOM_PASS"
-	uci set wireless.freedom_${RADIO}.isolate="1"
+	uci set wireless.freedom_${RADIO}.isolate="0"
 	uci set wireless.freedom_${RADIO}.bridge_isolate="1"
 	uci set wireless.freedom_${RADIO}.disabled="0"
 done
