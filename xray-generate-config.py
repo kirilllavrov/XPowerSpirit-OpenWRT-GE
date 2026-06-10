@@ -318,7 +318,7 @@ def base_config() -> dict:
                 "tag": "tproxy-in",
                 "listen": "0.0.0.0",
                 "port": 12345,
-                "protocol": "dokodemo-door",
+                "protocol": "tunnel",
                 "settings": {
                     "allowedNetwork": "tcp,udp",
                     "followRedirect": True
@@ -338,9 +338,9 @@ def base_config() -> dict:
                 "tag": "dns-local",
                 "listen": "127.0.0.1",
                 "port": 5353,
-                "protocol": "dokodemo-door",
+                "protocol": "tunnel",
                 "settings": {
-                    "network": "tcp,udp"
+                    "allowedNetwork": "tcp,udp"
                 }
             }
         ]
