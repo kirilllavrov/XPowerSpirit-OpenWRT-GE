@@ -516,18 +516,44 @@ python3 xray-generate-config.py --format json --remarks "best" --output config.j
   "subscription": {
     "url": "https://your-subscription-url.com",
     "user_agent": "XPower/1.0",
-    "remarks_filter": ""
+    "remarks_filter": "",
+    "domain_whitelist": [
+      "router.freenternet.top"
+    ]
   },
   "hwid": "a1b2c3d4e5f6...",
   "device_model": "Cudy WR3000S v1",
   "device_os": "OpenWrt",
   "ver_os": "25.12.4",
-  "domain_whitelist": [
-    "router.freenternet.top"
-  ],
   "geo": {
     "geoip_url": "https://raw.githubusercontent.com/kirilllavrov/geoip-builder/release/geoip.dat",
     "geosite_url": "https://raw.githubusercontent.com/kirilllavrov/geosite-builder/release/geosite.dat"
+  },
+  "routing": {
+    "block": {
+      "domain": ["geosite:category-ads"]
+    },
+    "direct": {
+      "ip": ["geoip:ru", "geoip:private"],
+      "domain": [
+        "geosite:private",
+        "geosite:category-browser",
+        "geosite:category-cdn-ru",
+        "geosite:category-mobile",
+        "geosite:category-ru"
+      ]
+    },
+    "streaming": {
+      "domain": ["geosite:category-streaming", "geosite:category-games"]
+    },
+    "doh_domains": [
+      "common.dot.dns.yandex.net",
+      "cloudflare-dns.com",
+      "dns.google",
+      "dns.quad9.net",
+      "doh.opendns.com",
+      "dns.nextdns.io"
+    ]
   }
 }
 ```
@@ -543,9 +569,15 @@ python3 xray-generate-config.py --format json --remarks "best" --output config.j
 | `device_model` | string | Модель устройства (из dmesg) |
 | `device_os` | string | Операционная система (DISTRIB_ID) |
 | `ver_os` | string | Версия ОС (DISTRIB_RELEASE) |
-| `domain_whitelist` | array | Домены для приоритетного выбора сервера |
+| `subscription.domain_whitelist` | array | Домены для приоритетного выбора сервера |
 | `geo.geoip_url` | string | URL geoip.dat |
 | `geo.geosite_url` | string | URL geosite.dat |
+| `routing.block.domain` | array | Домены/geosite для блокировки (blackhole) |
+| `routing.block.ip` | array | IP/geoip для блокировки (опционально) |
+| `routing.direct.ip` | array | IP/geoip для прямого соединения |
+| `routing.direct.domain` | array | Домены/geosite для прямого соединения |
+| `routing.streaming.domain` | array | Домены стриминга/игр (через балансировщик) |
+| `routing.doh_domains` | array | DoH-домены для перехвата (→ direct) |
 
 > **Примечание:** Настройки сетей (`--guest-ip=`, `--freedom-ip=`) — это параметры установочного скрипта. Они применяются в UCI напрямую и не сохраняются в `settings.json`.
 
@@ -623,11 +655,32 @@ service network restart
 
 ```bash
 jq --arg d 'your-custom-domain.com' \
-    'if .domain_whitelist | index($d) then . else .domain_whitelist += [$d] end' \
+    'if .subscription.domain_whitelist | index($d) then . else .subscription.domain_whitelist += [$d] end' \
     /etc/xray/settings.json > /tmp/settings.tmp && mv /tmp/settings.tmp /etc/xray/settings.json
 ```
 
 Затем перегенерировать конфиг через `update-xray.sh`.
+
+### Настройка маршрутизации
+
+Все правила маршрутизации настраиваются в `settings.json` → `routing`. Поддерживаются поля `ip`, `domain`, `port`, `network` (как в [RuleObject Xray](https://xtls.github.io/config/routing.html#ruleobject)).
+
+```bash
+# Пример: добавить домен в блокировку
+jq '.routing.block.domain += ["geosite:category-gambling"]' \
+    /etc/xray/settings.json > /tmp/settings.tmp && mv /tmp/settings.tmp /etc/xray/settings.json
+
+# Пример: добавить IP-диапазон в direct
+jq '.routing.direct.ip += ["1.1.1.1"]' \
+    /etc/xray/settings.json > /tmp/settings.tmp && mv /tmp/settings.tmp /etc/xray/settings.json
+
+# Пример: добавить домен в стриминг (пойдёт через балансировщик)
+jq '.routing.streaming.domain += ["geosite:netflix"]' \
+    /etc/xray/settings.json > /tmp/settings.tmp && mv /tmp/settings.tmp /etc/xray/settings.json
+
+# После изменений — перегенерировать конфиг
+/usr/share/xray/update-xray.sh
+```
 
 ---
 

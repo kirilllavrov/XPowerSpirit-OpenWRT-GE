@@ -23,10 +23,12 @@ die() {
     exit 1
 }
 
-# Единая функция загрузки (curl)
+# Единая функция загрузки (curl) с поддержкой дополнительных заголовков
+# Использование: fetch_url "URL" "DST" [-H "Header: value" ...]
 fetch_url() {
     local url="$1"
     local dst="$2"
+    shift 2
     local max_retries=2
     local retry=1
 
@@ -43,6 +45,7 @@ fetch_url() {
             ${_ver:+-H "X-Ver-Os: $_ver"} \
             ${_model:+-H "X-Device-Model: $_model"} \
             ${_os:+-H "X-Device-Os: $_os"} \
+            "$@" \
             -o "$dst" "$url"
         local rc=$?
 
@@ -301,46 +304,29 @@ update_geo "$GEOSITE_URL" "$GEOSITE"
 
 echo "→ Генерация config.json (User-Agent: $SUB_USER_AGENT)..." >>"$LOG"
 
-# Системные заголовки для запроса подписки
-_ver=$(settings_get ".ver_os" 2>/dev/null || echo "")
-_model=$(settings_get ".device_model" 2>/dev/null || echo "")
-_os=$(settings_get ".device_os" 2>/dev/null || echo "")
-
 # Скачиваем подписку
-if curl -s -L \
-    -H "User-Agent: $SUB_USER_AGENT" \
-    -H "x-hwid: $HWID" \
-    ${_ver:+-H "X-Ver-Os: $_ver"} \
-    ${_model:+-H "X-Device-Model: $_model"} \
-    ${_os:+-H "X-Device-Os: $_os"} \
-    "$SUB_URL" -o "$TMP_DIR/sub.txt"; then
-    
-    # Проверяем, что скачалось не HTML
-    if head -n 1 "$TMP_DIR/sub.txt" 2>/dev/null | grep -qi "<html\|<!DOCTYPE"; then
-        echo "[X] Подписка вернула HTML, а не данные" >>"$LOG"
+if fetch_url "$SUB_URL" "$TMP_DIR/sub.txt" -H "x-hwid: $HWID"; then
+    # Единый пайплайн: парсер (с автоопределением формата) → генератор
+    if [ -n "$REMARKS_FILTER" ]; then
+        python3 "$PARSER" --ua "$SUB_USER_AGENT" --remarks "$REMARKS_FILTER" < "$TMP_DIR/sub.txt" > "$TMP_DIR/parsed.json" 2>>"$LOG"
     else
-        # Единый пайплайн: парсер (с автоопределением формата) → генератор
-        if [ -n "$REMARKS_FILTER" ]; then
-            python3 "$PARSER" --ua "$SUB_USER_AGENT" --remarks "$REMARKS_FILTER" < "$TMP_DIR/sub.txt" > "$TMP_DIR/parsed.json" 2>>"$LOG"
-        else
-            python3 "$PARSER" --ua "$SUB_USER_AGENT" < "$TMP_DIR/sub.txt" > "$TMP_DIR/parsed.json" 2>>"$LOG"
-        fi
-        
-        if [ $? -eq 0 ]; then
-            if python3 "$GENERATOR" --format unified --output "$TMP_DIR/config.json" < "$TMP_DIR/parsed.json" 2>>"$LOG"; then
-                if xray run -test -config "$TMP_DIR/config.json" >>"$LOG" 2>&1; then
-                    mv "$TMP_DIR/config.json" "$CONFIG_JSON"
-                    echo "[+] Новый config.json установлен" >>"$LOG"
-                else
-                    echo "[X] Новый config.json невалиден" >>"$LOG"
-                    xray run -test -config "$TMP_DIR/config.json" 2>>"$LOG"
-                fi
+        python3 "$PARSER" --ua "$SUB_USER_AGENT" < "$TMP_DIR/sub.txt" > "$TMP_DIR/parsed.json" 2>>"$LOG"
+    fi
+
+    if [ $? -eq 0 ]; then
+        if python3 "$GENERATOR" --format unified --output "$TMP_DIR/config.json" < "$TMP_DIR/parsed.json" 2>>"$LOG"; then
+            if xray run -test -config "$TMP_DIR/config.json" >>"$LOG" 2>&1; then
+                mv "$TMP_DIR/config.json" "$CONFIG_JSON"
+                echo "[+] Новый config.json установлен" >>"$LOG"
             else
-                echo "[X] Ошибка генератора конфига" >>"$LOG"
+                echo "[X] Новый config.json невалиден" >>"$LOG"
+                xray run -test -config "$TMP_DIR/config.json" 2>>"$LOG"
             fi
         else
-            echo "[X] Ошибка парсера подписки" >>"$LOG"
+            echo "[X] Ошибка генератора конфига" >>"$LOG"
         fi
+    else
+        echo "[X] Ошибка парсера подписки" >>"$LOG"
     fi
 else
     echo "[!] Не удалось скачать подписку" >>"$LOG"

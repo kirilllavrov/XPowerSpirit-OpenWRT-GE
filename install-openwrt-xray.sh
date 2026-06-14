@@ -223,7 +223,7 @@ settings_set ".subscription.url" "$SUB_URL"
 [ -n "$SUB_USER_AGENT" ] && settings_set ".subscription.user_agent" "$SUB_USER_AGENT"
 [ -n "$REMARKS_FILTER" ] && settings_set ".subscription.remarks_filter" "$REMARKS_FILTER"
 [ -n "$DWL_DOMAIN" ] && jq --arg d "$DWL_DOMAIN" \
-    'if .domain_whitelist | index($d) then . else .domain_whitelist += [$d] end' \
+    'if .subscription.domain_whitelist | index($d) then . else .subscription.domain_whitelist += [$d] end' \
     "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
 echo "[+] settings.json сохранён: $SETTINGS_JSON"
 
