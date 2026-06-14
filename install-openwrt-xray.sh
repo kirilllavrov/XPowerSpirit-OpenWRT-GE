@@ -557,6 +557,7 @@ START=85
 STOP=10
 
 CONF="/etc/xray/config.json"
+SETTINGS_JSON="/etc/xray/settings.json"
 ASSET_DIR="/usr/share/xray"
 
 start_service() {
@@ -568,9 +569,6 @@ start_service() {
         logger -t xray "Waiting for network... ($i)"
         sleep 2
     done
-
-    # Сохраняем IP шлюза (нужен генератору для dns-in)
-    ip -4 addr show br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1 > /etc/xray/gateway_ip 2>/dev/null || true
 
     # Синхронизация времени (важно для TLS/REALITY)
     ntpd -q -p ru.pool.ntp.org 2>/dev/null || \

@@ -480,7 +480,6 @@ python3 xray-generate-config.py --format json --remarks "best" --output config.j
 /etc/xray/
 ├── settings.json         # 🔥 ЕДИНЫЙ конфигурационный файл (см. ниже)
 ├── config.json           # Активная конфигурация Xray (генерируется автоматически)
-├── gateway_ip            # IP шлюза (создаётся при старте, transient)
 └── state/
     ├── xray.zip.sha256sum
     ├── xray.dgst
