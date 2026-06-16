@@ -190,6 +190,7 @@ download_script "$REPO/xray-generate-config.py" "$GENERATOR"
 download_script "$REPO/xray-sub-parser.py" "$PARSER"
 download_script "$REPO/update-xray.sh" "$UPDATER"
 download_script "$REPO/update-nft.sh" "$NFT_UPDATER"
+download_script "$REPO/xray-status.py" "$STATUS_TOOL"
 
 echo "[+] Все скрипты загружены и готовы к использованию"
 
