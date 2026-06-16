@@ -76,9 +76,8 @@ settings_set() {
 #   ЕДИНАЯ ФУНКЦИЯ ЗАГРУЗКИ
 # =============================================
 
-# Универсальная загрузка файла (с авто-заголовками из settings.json + до 3 кастомных)
-# Использование:
-#   download_file "URL" "DEST" ["HEADER1" "HEADER2" "HEADER3"]
+# Универсальная загрузка файла (с авто-заголовками из settings.json + кастомные)
+# Использование: download_file "URL" "DEST" ["-H" "Header: value" ...]
 download_file() {
     local url="$1"
     local dst="$2"
@@ -99,9 +98,7 @@ download_file() {
             ${_ver:+-H "X-Ver-Os: $_ver"} \
             ${_model:+-H "X-Device-Model: $_model"} \
             ${_os:+-H "X-Device-Os: $_os"} \
-            ${1:+-H "$1"} \
-            ${2:+-H "$2"} \
-            ${3:+-H "$3"} \
+            "$@" \
             -o "$dst" "$url"
         local rc=$?
 
@@ -741,15 +738,7 @@ echo "  → User-Agent: $SUB_UA"
 echo "  → HWID: $HWID"
 
 # Скачиваем подписку с заголовками
-if download_file "$SUB_URL" "/tmp/sub_raw.txt" "x-hwid: $HWID"; then
-    
-    # Проверяем, что скачалось не HTML
-    if head -n 1 "/tmp/sub_raw.txt" 2>/dev/null | grep -qi "<html\|<!DOCTYPE"; then
-        echo "  [X] Подписка вернула HTML, а не данные"
-        rm -f "/tmp/sub_raw.txt"
-        exit 1
-    fi
-    
+if download_file "$SUB_URL" "/tmp/sub_raw.txt" -H "x-hwid: $HWID"; then
     # Единый пайплайн: парсер (с автоопределением формата) → генератор
     if [ -n "$REMARKS" ]; then
         python3 "$PARSER" --ua "$SUB_UA" --remarks "$REMARKS" < "/tmp/sub_raw.txt" > "/tmp/parsed_outbounds.json" 2>>"$LOG_FILE"
