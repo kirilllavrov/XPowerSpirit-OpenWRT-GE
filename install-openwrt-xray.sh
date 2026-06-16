@@ -85,6 +85,9 @@ download_file() {
     _df_max_retries=3
     _df_retry=1
 
+    # DEBUG: логируем аргументы
+    echo "DEBUG download_file: url=[$_df_url] dst=[$_df_dst] args=[$3][$4][$5][$6]" >> /tmp/xray_install_debug.log
+
     # Системные заголовки из settings.json (могут быть пустыми при первом запуске)
     _df_ua=$(settings_get ".subscription.user_agent" 2>/dev/null || echo "XPower/1.0")
     _df_ver=$(settings_get ".ver_os" 2>/dev/null || echo "")
