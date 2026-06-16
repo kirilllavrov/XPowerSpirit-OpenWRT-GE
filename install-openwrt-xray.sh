@@ -80,53 +80,52 @@ settings_set() {
 # Универсальная загрузка файла (с авто-заголовками из settings.json + кастомные)
 # Использование: download_file "URL" "DEST" ["-H" "Header: value" ...]
 download_file() {
-    local url="$1"
-    local dst="$2"
-    local max_retries=3
-    local retry=1
+    _df_url="$1"
+    _df_dst="$2"
+    _df_max_retries=3
+    _df_retry=1
 
     # Системные заголовки из settings.json (могут быть пустыми при первом запуске)
-    local _ua _ver _model _os
-    _ua=$(settings_get ".subscription.user_agent" 2>/dev/null || echo "XPower/1.0")
-    _ver=$(settings_get ".ver_os" 2>/dev/null || echo "")
-    _model=$(settings_get ".device_model" 2>/dev/null || echo "")
-    _os=$(settings_get ".device_os" 2>/dev/null || echo "")
+    _df_ua=$(settings_get ".subscription.user_agent" 2>/dev/null || echo "XPower/1.0")
+    _df_ver=$(settings_get ".ver_os" 2>/dev/null || echo "")
+    _df_model=$(settings_get ".device_model" 2>/dev/null || echo "")
+    _df_os=$(settings_get ".device_os" 2>/dev/null || echo "")
 
-    while [ $retry -le $max_retries ]; do
+    while [ $_df_retry -le $_df_max_retries ]; do
         curl -s -L --max-time 15 \
-            -H "User-Agent: $_ua" \
-            ${_ver:+-H "X-Ver-Os: $_ver"} \
-            ${_model:+-H "X-Device-Model: $_model"} \
-            ${_os:+-H "X-Device-Os: $_os"} \
+            -H "User-Agent: $_df_ua" \
+            ${_df_ver:+-H "X-Ver-Os: $_df_ver"} \
+            ${_df_model:+-H "X-Device-Model: $_df_model"} \
+            ${_df_os:+-H "X-Device-Os: $_df_os"} \
             ${3:+$3} ${4:+"$4"} ${5:+$5} ${6:+"$6"} \
-            -o "$dst" "$url"
-        local rc=$?
+            -o "$_df_dst" "$_df_url"
+        _df_rc=$?
 
-        if [ $rc -eq 0 ] && [ -s "$dst" ]; then
-            if head -n 1 "$dst" 2>/dev/null | grep -qi "<html\|<!DOCTYPE"; then
-                rm -f "$dst"
+        if [ $_df_rc -eq 0 ] && [ -s "$_df_dst" ]; then
+            if head -n 1 "$_df_dst" 2>/dev/null | grep -qi "<html\|<!DOCTYPE"; then
+                rm -f "$_df_dst"
             else
                 return 0
             fi
         fi
 
-        if [ $retry -lt $max_retries ]; then
+        if [ $_df_retry -lt $_df_max_retries ]; then
             sleep 2
         fi
-        retry=$((retry + 1))
+        _df_retry=$((_df_retry + 1))
     done
 
     return 1
 }
 
 download_script() {
-    local url="$1"
-    local dst="$2"
-    if download_file "$url" "$dst"; then
-        chmod +x "$dst"
-        echo "  → $dst"
+    _ds_url="$1"
+    _ds_dst="$2"
+    if download_file "$_ds_url" "$_ds_dst"; then
+        chmod +x "$_ds_dst"
+        echo "  → $_ds_dst"
     else
-        echo "  [X] Ошибка: не удалось скачать $dst"
+        echo "  [X] Ошибка: не удалось скачать $_ds_dst"
         exit 1
     fi
 }
@@ -672,46 +671,46 @@ echo "[+] Sysctl настроен"
 echo "11. Скачиваем геофайлы, делаем HWID, генерируем config.json..."
 
 update_geo() {
-	local URL="$1"
-	local DEST="$2"
+	_ug_url="$1"
+	_ug_dest="$2"
 
-	local BASE="$(basename "$DEST")"
-	local TMP="/tmp/$BASE.tmp"
-	local TMP_SHA="/tmp/$BASE.sha256"
-	local SHA_FILE="${STATE_DIR}/${BASE}.sha256sum"
+	_ug_base="$(basename "$_ug_dest")"
+	_ug_tmp="/tmp/$_ug_base.tmp"
+	_ug_tmp_sha="/tmp/$_ug_base.sha256"
+	_ug_sha_file="${STATE_DIR}/${_ug_base}.sha256sum"
 
-	echo "  → Скачиваем $BASE"
+	echo "  → Скачиваем $_ug_base"
 
-	download_file "${URL}.sha256sum" "$TMP_SHA" || {
-		echo "  [X] Не удалось получить SHA256 для $BASE" >>"$LOG_FILE"
+	download_file "${_ug_url}.sha256sum" "$_ug_tmp_sha" || {
+		echo "  [X] Не удалось получить SHA256 для $_ug_base" >>"$LOG_FILE"
 		exit 1
 	}
-	REMOTE_SHA="$(cut -d' ' -f1 "$TMP_SHA")"
+	_ug_remote_sha="$(cut -d' ' -f1 "$_ug_tmp_sha")"
 
-	if [ -z "$REMOTE_SHA" ]; then
-		echo "  [X] Не удалось получить SHA256 для $BASE" >>"$LOG_FILE"
+	if [ -z "$_ug_remote_sha" ]; then
+		echo "  [X] Не удалось получить SHA256 для $_ug_base" >>"$LOG_FILE"
 		exit 1
 	fi
 
-	download_file "$URL" "$TMP" || {
-		echo "  [X] Не удалось скачать $BASE" >>"$LOG_FILE"
+	download_file "$_ug_url" "$_ug_tmp" || {
+		echo "  [X] Не удалось скачать $_ug_base" >>"$LOG_FILE"
 		exit 1
 	}
 
-	LOCAL_SHA="$(sha256sum "$TMP" | awk '{print $1}')"
+	_ug_local_sha="$(sha256sum "$_ug_tmp" | awk '{print $1}')"
 
-	if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
-		echo "  [X] SHA не совпадает для $BASE" >>"$LOG_FILE"
-		echo "ожидаемый: $REMOTE_SHA" >>"$LOG_FILE"
-		echo "фактический:   $LOCAL_SHA" >>"$LOG_FILE"
-		rm -f "$TMP" "$TMP_SHA"
+	if [ "$_ug_local_sha" != "$_ug_remote_sha" ]; then
+		echo "  [X] SHA не совпадает для $_ug_base" >>"$LOG_FILE"
+		echo "ожидаемый: $_ug_remote_sha" >>"$LOG_FILE"
+		echo "фактический:   $_ug_local_sha" >>"$LOG_FILE"
+		rm -f "$_ug_tmp" "$_ug_tmp_sha"
 		exit 1
 	fi
 
-	mv "$TMP" "$DEST"
-	echo "$REMOTE_SHA" >"$SHA_FILE"
+	mv "$_ug_tmp" "$_ug_dest"
+	echo "$_ug_remote_sha" >"$_ug_sha_file"
 
-	echo "  ✓ $BASE скачан и проверен"
+	echo "  ✓ $_ug_base скачан и проверен"
 }
 
 GEOIP_URL=$(settings_get ".geo.geoip_url")
