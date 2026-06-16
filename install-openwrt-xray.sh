@@ -1,6 +1,6 @@
 #!/bin/sh
 # OpenWrt 25.12.x — Xray TProxy (IPv4-only)
-# v 1.0
+# v 1.1
 
 # Логируем установку
 LOG_FILE="/tmp/xray_install.log"
@@ -82,7 +82,6 @@ settings_set() {
 download_file() {
     local url="$1"
     local dst="$2"
-    shift 2
     local max_retries=3
     local retry=1
 
@@ -99,7 +98,7 @@ download_file() {
             ${_ver:+-H "X-Ver-Os: $_ver"} \
             ${_model:+-H "X-Device-Model: $_model"} \
             ${_os:+-H "X-Device-Os: $_os"} \
-            "$@" \
+            ${3:+$3} ${4:+"$4"} ${5:+$5} ${6:+"$6"} \
             -o "$dst" "$url"
         local rc=$?
 
