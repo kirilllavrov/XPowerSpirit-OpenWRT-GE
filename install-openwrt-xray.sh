@@ -1,6 +1,5 @@
 #!/bin/sh
 # OpenWrt 25.12.x — Xray TProxy (IPv4-only)
-# v 1.3
 
 # Логируем установку
 LOG_FILE="/tmp/xray_install.log"
@@ -20,6 +19,7 @@ GENERATOR="/usr/share/xray/xray-generate-config.py"
 PARSER="/usr/share/xray/xray-sub-parser.py"
 UPDATER="/usr/share/xray/update-xray.sh"
 NFT_UPDATER="/usr/share/xray/update-nft.sh"
+STATUS_TOOL="/usr/share/xray/xray-status.py"
 CONFIG_DIR="/etc/xray"
 CONFIG_JSON="$CONFIG_DIR/config.json"
 SETTINGS_JSON="$CONFIG_DIR/settings.json"
@@ -84,9 +84,6 @@ download_file() {
     _df_dst="$2"
     _df_max_retries=3
     _df_retry=1
-
-    # DEBUG: логируем аргументы
-    echo "DEBUG download_file: url=[$_df_url] dst=[$_df_dst] args=[$3][$4][$5][$6]" >> /tmp/xray_install_debug.log
 
     # Системные заголовки из settings.json (могут быть пустыми при первом запуске)
     _df_ua=$(settings_get ".subscription.user_agent" 2>/dev/null || echo "XPower/1.0")
