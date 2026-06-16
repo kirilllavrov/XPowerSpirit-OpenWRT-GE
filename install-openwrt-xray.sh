@@ -1,6 +1,6 @@
 #!/bin/sh
 # OpenWrt 25.12.x — Xray TProxy (IPv4-only)
-# v 1.2
+# v 1.3
 
 # Логируем установку
 LOG_FILE="/tmp/xray_install.log"
