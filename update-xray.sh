@@ -80,9 +80,6 @@ GEO_DIR="/usr/share/xray"
 GEOIP="$GEO_DIR/geoip.dat"
 GEOSITE="$GEO_DIR/geosite.dat"
 
-GEOIP_URL=$(settings_get ".geo.geoip_url")
-GEOSITE_URL=$(settings_get ".geo.geosite_url")
-
 mkdir -p "$STATE_DIR" "$TMP_DIR"
 
 # =============================================
@@ -90,18 +87,21 @@ mkdir -p "$STATE_DIR" "$TMP_DIR"
 # =============================================
 
 settings_get() {
-    local key="$1"
+    _key="$1"
     [ -f "$SETTINGS_JSON" ] || return 1
     jq -r "
-        if $key | type == \"boolean\" then
-            if $key then \"1\" else \"0\" end
-        elif $key | type == \"array\" then
-            $key[]
+        if $_key | type == \"boolean\" then
+            if $_key then \"1\" else \"0\" end
+        elif $_key | type == \"array\" then
+            $_key[]
         else
-            $key // empty
+            $_key // empty
         end
     " "$SETTINGS_JSON" 2>/dev/null
 }
+
+GEOIP_URL=$(settings_get ".geo.geoip_url")
+GEOSITE_URL=$(settings_get ".geo.geosite_url")
 
 settings_set() {
     local key="$1"
